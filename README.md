@@ -1,4 +1,6 @@
-# LoanDash - Personal Debt and Loan Tracker
+# LoanDash - Personal Debt and Loan Tracker 
+
+(https://raw.githubusercontent.com/hamzamix/LoanDash/refs/heads/main/screenshots/homedark.png)
 
 ## 1. About LoanDash
 
@@ -21,6 +23,10 @@ The application is built with React, TypeScript, and Tailwind CSS, providing a f
 - **Search Functionality:** Quickly find specific debts, loans, or archived items across the application.
 - **Settings Panel:** Customize application behavior, such as setting up auto-archiving rules for paid-off items.
 - **Persistent Data:** All data is stored on a persistent Docker volume, ensuring your financial records are safe across container restarts and updates.
+
+## Screenshots 
+
+* [Screenshots](https://github.com/hamzamix/LoanDash/tree/main/screenshots)
 
 ## Getting Started
 
