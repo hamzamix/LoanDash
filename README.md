@@ -1,6 +1,8 @@
 # LoanDash - Personal Debt and Loan Tracker 
 
-![LoanDash Logo](https://raw.githubusercontent.com/hamzamix/LoanDash/refs/heads/main/screenshots/logo.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/hamzamix/LoanDash/refs/heads/main/screenshots/logo.png" alt="LoanDash Logo">
+</p>
 
 ## 1. About LoanDash
 
