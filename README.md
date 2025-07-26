@@ -93,4 +93,4 @@ When a new version of LoanDash is pushed to Docker Hub, you can easily update yo
 That's it! Your personal instance of LoanDash is now up and running with persistent data storage.
 
 
-[What Next](https://github.com/hamzamix/LoanDash/blob/main/WHAT%20NEXT.md)
+[What Next](https://github.com/hamzamix/LoanDash/blob/main/WHAT-NEXT.md)
