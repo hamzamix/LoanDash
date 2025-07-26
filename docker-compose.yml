@@ -3,7 +3,7 @@ version: '3.8'
 services:
   loandash:
     # Build the image from the Dockerfile in the current directory.
-    build: .
+    image: hamzamix/loandash:latest
     container_name: loandash
     # Use the host's default bridge network to avoid subnet exhaustion errors in Portainer.
     network_mode: bridge
