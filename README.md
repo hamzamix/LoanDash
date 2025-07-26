@@ -26,7 +26,11 @@ The application is built with React, TypeScript, and Tailwind CSS, providing a f
 
 ## Screenshots 
 
-* [Screenshots](https://github.com/hamzamix/LoanDash/tree/main/screenshots)
+Here's a preview of the LoanDash application:
+
+![LoanDash Home Page - Dark Mode](https://raw.githubusercontent.com/hamzamix/LoanDash/refs/heads/main/screenshots/homedark.png)
+
+* [More Screenshots](https://github.com/hamzamix/LoanDash/tree/main/screenshots)
 
 ## Getting Started
 
