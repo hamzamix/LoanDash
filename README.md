@@ -94,3 +94,9 @@ That's it! Your personal instance of LoanDash is now up and running with persist
 
 
 [What Next](https://github.com/hamzamix/LoanDash/blob/main/WHAT-NEXT.md)
+
+---
+
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
