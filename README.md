@@ -1,6 +1,6 @@
 # LoanDash - Personal Debt and Loan Tracker 
 
-(https://raw.githubusercontent.com/hamzamix/LoanDash/refs/heads/main/screenshots/homedark.png)
+
 
 ## 1. About LoanDash
 
