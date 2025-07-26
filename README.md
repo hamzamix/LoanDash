@@ -22,44 +22,60 @@ The application is built with React, TypeScript, and Tailwind CSS, providing a f
 - **Settings Panel:** Customize application behavior, such as setting up auto-archiving rules for paid-off items.
 - **Persistent Data:** All data is stored on a persistent Docker volume, ensuring your financial records are safe across container restarts and updates.
 
-## 3. How to Deploy with Portainer
+## Getting Started
 
-This application is containerized with Docker and includes a `docker-compose.yml` file, making it incredibly simple to deploy using Portainer Stacks.
+Follow these simple steps to get your LoanDash application up and running.
 
 ### Prerequisites
 
-- A running Docker environment.
-- Portainer connected to your Docker environment.
-- This project uploaded to your own GitHub repository (e.g., `github.com/hamzamix/loandsh`).
+Before you begin, ensure you have the following installed on your system:
 
-### Deployment Steps
+* **Git:** For cloning the repository.
+* **Docker Desktop (Windows/macOS) or Docker Engine & Docker Compose (Linux):** To run the application in containers.
+    * [Install Docker Desktop](https://www.docker.com/products/docker-desktop)
+    * [Install Docker Engine (Linux)](https://docs.docker.com/engine/install/)
+    * [Install Docker Compose (Linux)](https://docs.docker.com/compose/install/)
 
-1.  **Log in to Portainer:**
-    Open your Portainer instance in your web browser and log in.
+### Installation & Deployment
 
-2.  **Navigate to Stacks:**
-    In the left-hand menu, select the correct environment (e.g., your local Docker instance) and then click on **"Stacks"**.
+This method uses the pre-built Docker image from Docker Hub, providing the quickest way to get started.
 
-3.  **Create a New Stack:**
-    Click the **"+ Add stack"** button.
+1.  **Clone the Repository:**
+    Navigate to where you want to store the project on your machine, then run:
+    ```bash
+    git clone [https://github.com/hamzamix/LoanDash.git](https://github.com/hamzamix/LoanDash.git)
+    cd LoanDash
+    ```
 
-4.  **Configure the Stack:**
-    -   **Name:** Give your stack a name, for example, `loandash`.
-    -   **Build method:** Select **"Git Repository"**.
-    -   **Repository URL:** Enter the URL of your GitHub repository (e.g., `https://github.com/hamzamix/loandsh.git`).
-    -   **Repository reference:** Leave this as `refs/heads/main` to use the main branch.
-    -   **Compose path:** Enter `docker-compose.yml`. Portainer will look for this file in the root of your repository.
+2.  **Start the Application:**
+    From inside the `LoanDash` directory (where `docker-compose.yml` is located), execute:
+    ```bash
+    sudo docker-compose up -d
+    ```
+    * Docker Compose will automatically pull the `hamzamix/loandash:latest` image from Docker Hub (if it's not already on your system).
+    * It will then create and start the `loandash` container, mapping port `8050` on your host to the application's internal port `3000`.
+    * A Docker volume named `loandash-data` will be created (if it doesn't exist) to ensure your `db.json` data persists across container restarts and updates.
 
-5.  **Deploy the Stack:**
-    Scroll down and click the **"Deploy the stack"** button. Portainer will now:
-    a.  Pull the code from your GitHub repository.
-    b.  Build the Docker image using the `Dockerfile` provided.
-    c.  Create a persistent Docker volume named `loandash-data` to store your application data.
-    d.  Create and start the container as defined in `docker-compose.yml`.
+3.  **Access the Application:**
+    Open your web browser and navigate to:
+    ```
+    http://localhost:8050
+    ```
+    Your LoanDash application should now be running!
 
-    > **Note:** If you've previously encountered errors like `all predefined address pools have been fully subnetted`, rest assured that the provided `docker-compose.yml` is configured to use Docker's default `bridge` network, which prevents this issue.
+### Updating the Application
 
-6.  **Access LoanDash:**
-    Once the deployment is complete, you can access your LoanDash instance by navigating to `http://<your-server-ip>:8050` in your web browser (or `http://localhost:8050` if running on your local machine). The port `8050` is defined in the `docker-compose.yml` file.
+When a new version of LoanDash is pushed to Docker Hub, you can easily update your running instance:
+
+1.  **Navigate to your project directory:**
+    ```bash
+    cd /path/to/your/LoanDash
+    ```
+2.  **Pull the latest Docker image and recreate containers:**
+    ```bash
+    sudo docker-compose pull loandash # Fetches the new 'latest' image for the loandash service
+    sudo docker-compose up -d --force-recreate # Stops, removes, and recreates the container with the new image
+    ```
+    This process ensures your `loandash-data` volume remains intact, preserving your `db.json` data.
 
 That's it! Your personal instance of LoanDash is now up and running with persistent data storage.
