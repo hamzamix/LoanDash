@@ -1,0 +1,64 @@
+{
+  "loandash-dark-mode": true,
+  "loandash-debts": [
+    {
+      "name": "John Doe",
+      "totalAmount": 1000,
+      "type": "Friend/Family Credit",
+      "startDate": "2025-07-21T00:00:00.000Z",
+      "dueDate": "2025-08-21T00:00:00.000Z",
+      "description": "Test debt for review",
+      "isRecurring": false,
+      "id": "aa91a8d2-46f0-4612-8297-b7d2c26f41e2",
+      "payments": [],
+      "status": "active"
+    },
+    {
+      "name": "Test Borrower",
+      "totalAmount": 500,
+      "type": "Friend/Family Credit",
+      "startDate": "2025-07-21T00:00:00.000Z",
+      "dueDate": "2025-08-21T00:00:00.000Z",
+      "description": "Test debt for review",
+      "isRecurring": false,
+      "id": "f0d1ac3a-dac8-4789-931c-206259002969",
+      "payments": [],
+      "status": "active"
+    }
+  ],
+  "loandash-loans": [
+    {
+      "name": "Jane Doe",
+      "totalAmount": 500,
+      "startDate": "2025-07-21T00:00:00.000Z",
+      "dueDate": "2025-08-21T00:00:00.000Z",
+      "description": "Test loan for review",
+      "id": "01274a15-0b24-4eff-97fc-5f0e195c7117",
+      "repayments": [],
+      "status": "active"
+    },
+    {
+      "name": "Jane Doe",
+      "totalAmount": 500,
+      "startDate": "2025-07-21T00:00:00.000Z",
+      "dueDate": "2025-08-21T00:00:00.000Z",
+      "description": "Test loan for review",
+      "id": "a1086d71-493d-4192-9eb0-868e9bef9590",
+      "repayments": [],
+      "status": "active"
+    },
+    {
+      "name": "TEST",
+      "totalAmount": 2000,
+      "startDate": "2025-07-21T00:00:00.000Z",
+      "dueDate": "2025-08-21T00:00:00.000Z",
+      "description": "TEST",
+      "id": "d85e72c3-cb89-4d71-9cb6-103b895e533d",
+      "repayments": [],
+      "status": "active"
+    }
+  ],
+  "loandash-archived-debts": [],
+  "loandash-archived-loans": [],
+  "loandash-auto-archive": "never"
+}

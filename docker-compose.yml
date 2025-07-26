@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  loandash:
+    # Build the image from the Dockerfile in the current directory.
+    build: .
+    container_name: loandash
+    # Use the host's default bridge network to avoid subnet exhaustion errors in Portainer.
+    network_mode: bridge
+    ports:
+      # Map host port 8050 to the container's internal port 3000.
+      - "8050:3000"
+    volumes:
+      # Mount a persistent, named volume to the /data directory inside the container.
+      # This is where db.json will be stored safely.
+      - loandash-data:/data
+    restart: unless-stopped
+
+# Define the named volume that Docker will manage for data persistence.
+volumes:
+  loandash-data:
