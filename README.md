@@ -94,5 +94,5 @@ That's it! Your personal instance of LoanDash is now up and running with persist
 
 
 <p align="center">
-  <img src="* [Wha't Next](https://github.com/hamzamix/LoanDash/blob/main/WHAT%20NEXT.md)
+  [Wha't Next](https://github.com/hamzamix/LoanDash/blob/main/WHAT%20NEXT.md)
 </p>
