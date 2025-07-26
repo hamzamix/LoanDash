@@ -91,3 +91,8 @@ When a new version of LoanDash is pushed to Docker Hub, you can easily update yo
     This process ensures your `loandash-data` volume remains intact, preserving your `db.json` data.
 
 That's it! Your personal instance of LoanDash is now up and running with persistent data storage.
+
+
+<p align="center">
+  <img src="* [Wha't Next](https://github.com/hamzamix/LoanDash/blob/main/WHAT%20NEXT.md)
+</p>
