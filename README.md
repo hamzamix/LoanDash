@@ -26,7 +26,7 @@ The application is built with React, TypeScript, and Tailwind CSS, providing a f
 - **Settings Panel:** Customize application behavior, such as setting up auto-archiving rules for paid-off items.
 - **Persistent Data:** All data is stored on a persistent Docker volume, ensuring your financial records are safe across container restarts and updates.
 
-## Screenshots 
+## 3. Screenshots 
 
 Here's a preview of the LoanDash application:
 
@@ -34,7 +34,7 @@ Here's a preview of the LoanDash application:
 
 * [More Screenshots](https://github.com/hamzamix/LoanDash/tree/main/screenshots)
 
-## Getting Started
+## 4. Getting Started
 
 Follow these simple steps to get your LoanDash application up and running.
 
