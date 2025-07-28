@@ -58,6 +58,7 @@ This method uses the pre-built Docker image from Docker Hub, providing the quick
     git clone [https://github.com/hamzamix/LoanDash.git](https://github.com/hamzamix/LoanDash.git)
     cd LoanDash
     ```
+    *(Alternatively, you can manually download just the `[docker-compose.yml](https://github.com/hamzamix/LoanDash/blob/main/docker-compose.yml)` file if you prefer
 
 2.  **Start the Application:**
     From inside the `LoanDash` directory (where `docker-compose.yml` is located), execute:
