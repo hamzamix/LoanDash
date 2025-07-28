@@ -75,7 +75,7 @@ This method uses the pre-built Docker image from Docker Hub, providing the quick
 4.  **Access the Application:**
     Open your web browser and navigate to:
     ```
-    http://localhost:8050
+    http://<Your Server IP>:8050
     ```
     Your LoanDash application should now be running!
 
