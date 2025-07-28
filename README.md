@@ -59,10 +59,10 @@ This method uses the pre-built Docker image from Docker Hub, providing the quick
     cd LoanDash
     ```
     
-    **(Alternatively, you can manually download just the [docker-compose.yml](https://github.com/hamzamix/LoanDash/blob/main/docker-compose.yml) file if you prefer
+3.  **(Alternatively, you can manually download just the [docker-compose.yml](https://github.com/hamzamix/LoanDash/blob/main/docker-compose.yml) file if you prefer
 
-
-    2.  **Start the Application:**
+    
+3.  **Start the Application:**
     From inside the `LoanDash` directory (where `docker-compose.yml` is located), execute:
     ```bash
     sudo docker-compose up -d
@@ -71,7 +71,7 @@ This method uses the pre-built Docker image from Docker Hub, providing the quick
     * It will then create and start the `loandash` container, mapping port `8050` on your host to the application's internal port `3000`.
     * A Docker volume named `loandash-data` will be created (if it doesn't exist) to ensure your `db.json` data persists across container restarts and updates.
 
-3.  **Access the Application:**
+4.  **Access the Application:**
     Open your web browser and navigate to:
     ```
     http://localhost:8050
