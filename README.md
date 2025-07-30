@@ -55,7 +55,7 @@ This method uses the pre-built Docker image from Docker Hub, providing the quick
 1.  **Clone the Repository:**
     Navigate to where you want to store the project on your machine, then run:
     ```bash
-    git clone [https://github.com/hamzamix/LoanDash.git](https://github.com/hamzamix/LoanDash.git)
+    git clone https://github.com/hamzamix/LoanDash.git
     cd LoanDash
     ```
     
