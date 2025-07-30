@@ -70,7 +70,7 @@ This method uses the pre-built Docker image from Docker Hub, providing the quick
     ```
     * Docker Compose will automatically pull the `hamzamix/loandash:latest` image from Docker Hub (if it's not already on your system).
     * It will then create and start the `loandash` container, mapping port `8050` on your host to the application's internal port `3000`.
-    * A Docker volume named `loandash-data` will be created (if it doesn't exist) to ensure your `db.json` data persists across container restarts and updates.
+    * **A Docker named volume** (`loandash-data`) will be created and mounted to `/data` inside the container to ensure your `db.json` data persists safely across container restarts and updates. **On the very first run, your application will initialize an empty `db.json` file in this volume.**
 
 4.  **Access the Application:**
     Open your web browser and navigate to:
@@ -87,12 +87,17 @@ When a new version of LoanDash is pushed to Docker Hub, you can easily update yo
     ```bash
     cd /path/to/your/LoanDash
     ```
-2.  **Pull the latest Docker image and recreate containers:**
+2.  **Pull the latest Docker image:**
     ```bash
-    sudo docker-compose pull loandash # Fetches the new 'latest' image for the loandash service
-    sudo docker-compose up -d --force-recreate # Stops, removes, and recreates the container with the new image
+    sudo docker-compose pull loandash
     ```
-    This process ensures your `loandash-data` volume remains intact, preserving your `db.json` data.
+    This command fetches the new `latest` image for the `loandash` service from Docker Hub.
+
+3.  **Recreate the container with the new image:**
+    ```bash
+    sudo docker-compose up -d --force-recreate
+    ```
+    This stops, removes, and recreates the container using the newly pulled image. Your named `loandash-data` volume remains intact, preserving all your `db.json` data.
 
 That's it! Your personal instance of LoanDash is now up and running with persistent data storage.
 
