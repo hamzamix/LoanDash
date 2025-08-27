@@ -36,6 +36,7 @@ RUN npm install --omit=dev
 # Copy the backend server and the built frontend assets from the 'build' stage.
 COPY server.js .
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/public ./public
 
 # Expose the port the server runs on inside the container.
 EXPOSE 3000

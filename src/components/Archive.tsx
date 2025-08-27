@@ -10,21 +10,23 @@ import { ChevronDownIcon, ExclamationTriangleIcon } from './common/Icons';
 interface ArchiveProps {
   archivedDebts: Debt[];
   archivedLoans: Loan[];
+  defaultCurrency: string;
   onDeleteDebt: (debtId: string) => void;
   onDeleteLoan: (loanId: string) => void;
 }
 
-const currencyFormatter = {
-    format: (value: number) => {
-        const formattedValue = new Intl.NumberFormat('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(value);
-        return `${formattedValue} DH`;
-    }
-};
+const Archive: React.FC<ArchiveProps> = ({ archivedDebts, archivedLoans, defaultCurrency, onDeleteDebt, onDeleteLoan }) => {
+  const currencyFormatter = {
+      format: (value: number) => {
+          const formattedValue = new Intl.NumberFormat('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+          }).format(value);
+          return `${formattedValue} ${defaultCurrency}`;
+      }
+  };
 
-const ArchivedItem: React.FC<{item: Debt | Loan, onDelete: (id: string) => void, type: 'Debt' | 'Loan'}> = ({item, onDelete, type}) => {
+  const ArchivedItem: React.FC<{item: Debt | Loan, onDelete: (id: string) => void, type: 'Debt' | 'Loan'}> = ({item, onDelete, type}) => {
     const [expanded, setExpanded] = useState(false);
 
     const payments = 'payments' in item ? item.payments : item.repayments;
@@ -101,7 +103,6 @@ const ArchivedItem: React.FC<{item: Debt | Loan, onDelete: (id: string) => void,
     );
 };
 
-const Archive: React.FC<ArchiveProps> = ({ archivedDebts, archivedLoans, onDeleteDebt, onDeleteLoan }) => {
   return (
     <div className="space-y-8">
       <div>

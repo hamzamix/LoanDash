@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Payment } from '../types';
-import { formatCurrency, SUPPORTED_CURRENCIES } from '../utils/currency';
-import Modal from './common/Modal';
+import { formatCurrency } from '../utils/currency';
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (payment: Omit<Payment, 'id'>) => void;
-  title: string;
-  remainingAmount: number;
+  onUpdate?: (paymentId: string, payment: Omit<Payment, 'id'>) => void;
+  maxAmount: number;
   currency: string;
+  itemType: 'debt' | 'loan';
+  itemName: string;
+  editingPayment?: Payment; // New prop for editing existing payment
 }
 
 const PAYMENT_METHODS = [
@@ -19,184 +21,230 @@ const PAYMENT_METHODS = [
   'Debit Card',
   'Check',
   'Mobile Payment',
+  'Online Banking',
   'Other'
 ];
 
-const PaymentModal: React.FC<PaymentModalProps> = ({
+export const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  title,
-  remainingAmount,
-  currency
+  onUpdate,
+  maxAmount,
+  currency,
+  itemType,
+  itemName,
+  editingPayment
 }) => {
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [method, setMethod] = useState('Cash');
-  const [notes, setNotes] = useState('');
   const [isPartial, setIsPartial] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const isEditing = !!editingPayment;
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingPayment) {
+      setAmount(editingPayment.amount.toString());
+      setMethod(editingPayment.method || 'Cash');
+      setIsPartial(editingPayment.isPartial || false);
+      setNotes(editingPayment.notes || '');
+      setDate(new Date(editingPayment.date).toISOString().split('T')[0]);
+    } else {
+      // Reset form for new payment
+      setAmount('');
+      setMethod('Cash');
+      setIsPartial(false);
+      setNotes('');
+      setDate(new Date().toISOString().split('T')[0]);
+    }
+  }, [editingPayment, isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const validationErrors: string[] = [];
     const paymentAmount = parseFloat(amount);
-    
     if (isNaN(paymentAmount) || paymentAmount <= 0) {
-      validationErrors.push('Payment amount must be a positive number.');
-    }
-    
-    if (paymentAmount > remainingAmount && !isPartial) {
-      validationErrors.push('Payment amount cannot exceed the remaining balance.');
-    }
-    
-    if (!date) {
-      validationErrors.push('Payment date is required.');
-    }
-    
-    if (validationErrors.length > 0) {
-      setErrors(validationErrors);
+      alert('Please enter a valid payment amount');
       return;
     }
+
+    if (!date) {
+      alert('Please select a payment date');
+      return;
+    }
+
+    const paymentDate = new Date(date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
     
-    onSubmit({
+    if (paymentDate > today) {
+      alert('Payment date cannot be in the future');
+      return;
+    }
+
+    // For editing, we need to consider the current payment amount in the max calculation
+    const effectiveMaxAmount = isEditing ? maxAmount + editingPayment!.amount : maxAmount;
+    
+    if (paymentAmount > effectiveMaxAmount) {
+      alert(`Payment amount cannot exceed ${formatCurrency(effectiveMaxAmount, currency)}`);
+      return;
+    }
+
+    const payment: Omit<Payment, 'id'> = {
       amount: paymentAmount,
       date: new Date(date).toISOString(),
       method,
-      notes: notes.trim() || undefined,
-      isPartial: paymentAmount < remainingAmount
-    });
+      isPartial: isPartial || paymentAmount < effectiveMaxAmount,
+      notes: notes.trim() || undefined
+    };
+
+    if (isEditing && onUpdate) {
+      onUpdate(editingPayment!.id, payment);
+    } else {
+      onSubmit(payment);
+    }
     
-    // Reset form
-    setAmount('');
-    setDate(new Date().toISOString().split('T')[0]);
-    setMethod('Cash');
-    setNotes('');
-    setIsPartial(false);
-    setErrors([]);
-    onClose();
+    onClose(); // Close modal after successful submission
   };
 
-  const handleClose = () => {
-    setAmount('');
-    setDate(new Date().toISOString().split('T')[0]);
-    setMethod('Cash');
-    setNotes('');
-    setIsPartial(false);
-    setErrors([]);
-    onClose();
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setAmount(value);
+    
+    const numValue = parseFloat(value);
+    const effectiveMaxAmount = isEditing ? maxAmount + editingPayment!.amount : maxAmount;
+    
+    if (!isNaN(numValue) && numValue < effectiveMaxAmount) {
+      setIsPartial(true);
+    } else if (!isNaN(numValue) && numValue >= effectiveMaxAmount) {
+      setIsPartial(false);
+    }
   };
+
+  if (!isOpen) return null;
+
+  const effectiveMaxAmount = isEditing ? maxAmount + editingPayment!.amount : maxAmount;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={title}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {errors.length > 0 && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md space-y-1" role="alert">
-            <p className="font-bold">Please correct the following errors:</p>
-            <ul className="list-disc list-inside text-sm">
-              {errors.map((error, i) => <li key={i}>{error}</li>)}
-            </ul>
-          </div>
-        )}
-        
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            <strong>Remaining Balance:</strong> {formatCurrency(remainingAmount, currency)}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white">
+            {isEditing ? 'Edit' : 'Record'} {itemType === 'debt' ? 'Payment' : 'Repayment'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="mb-4 p-3 bg-gray-700 rounded">
+          <p className="text-sm text-gray-300">
+            {itemType === 'debt' ? 'Paying to' : 'Receiving from'}: <span className="text-white font-medium">{itemName}</span>
+          </p>
+          <p className="text-sm text-gray-300">
+            {isEditing ? 'Available amount' : 'Outstanding amount'}: <span className="text-white font-medium">{formatCurrency(effectiveMaxAmount, currency)}</span>
           </p>
         </div>
 
-        <div>
-          <label htmlFor="paymentAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Payment Amount
-          </label>
-          <input
-            type="number"
-            id="paymentAmount"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-            placeholder={`0.00 ${currency}`}
-            step="0.01"
-            min="0"
-          />
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Payment Amount *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              max={effectiveMaxAmount}
+              value={amount}
+              onChange={handleAmountChange}
+              placeholder={`0.00 ${currency}`}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
 
-        <div>
-          <label htmlFor="paymentDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Payment Date
-          </label>
-          <input
-            type="date"
-            id="paymentDate"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Payment Date *
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
 
-        <div>
-          <label htmlFor="paymentMethod" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Payment Method
-          </label>
-          <select
-            id="paymentMethod"
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-          >
-            {PAYMENT_METHODS.map(methodOption => (
-              <option key={methodOption} value={methodOption}>{methodOption}</option>
-            ))}
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Payment Method *
+            </label>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              {PAYMENT_METHODS.map((paymentMethod) => (
+                <option key={paymentMethod} value={paymentMethod}>
+                  {paymentMethod}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label htmlFor="paymentNotes" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Notes <span className="text-xs text-slate-500">(Optional)</span>
-          </label>
-          <textarea
-            id="paymentNotes"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-            placeholder="Additional notes about this payment..."
-          />
-        </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isPartial"
+              checked={isPartial}
+              onChange={(e) => setIsPartial(e.target.checked)}
+              className="mr-2 rounded"
+            />
+            <label htmlFor="isPartial" className="text-sm text-gray-300">
+              This is a partial payment
+            </label>
+          </div>
 
-        <div className="flex items-center">
-          <input
-            id="isPartialPayment"
-            type="checkbox"
-            checked={isPartial}
-            onChange={(e) => setIsPartial(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-          />
-          <label htmlFor="isPartialPayment" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">
-            This is a partial payment
-          </label>
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Notes (Optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add any notes about this payment..."
+              rows={3}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-        <div className="flex justify-end gap-3 pt-4">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 transition-colors"
-          >
-            Add Payment
-          </button>
-        </div>
-      </form>
-    </Modal>
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              {isEditing ? 'Update Payment' : 'Record Payment'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
-
-export default PaymentModal;
 

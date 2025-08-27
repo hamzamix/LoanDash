@@ -14,16 +14,25 @@ export enum DebtType {
 
 export enum RecurrenceType {
   None = 'none',
+  Daily = 'daily',
   Weekly = 'weekly',
   BiWeekly = 'bi-weekly',
   Monthly = 'monthly',
-  Quarterly = 'quarterly'
+  Quarterly = 'quarterly',
+  Yearly = 'yearly'
+}
+
+export enum PaymentAutomationType {
+  Manual = 'Manual',
+  Auto = 'Auto'
 }
 
 export interface RecurrenceSettings {
   type: RecurrenceType;
   endDate?: string; // Optional end date for recurrence
   maxOccurrences?: number; // Optional max number of occurrences
+  firstPaymentDate?: string; // Optional user-defined first payment date
+  paymentAmount?: number; // Optional user-defined payment amount
 }
 
 export interface Debt {
@@ -40,8 +49,14 @@ export interface Debt {
   recurrenceSettings?: RecurrenceSettings; // Enhanced recurring settings
   status: 'active' | 'completed' | 'defaulted';
   currency?: string; // Currency code (USD, EUR, etc.)
-  reminderEnabled?: boolean; // Whether reminders are enabled
-  reminderDays?: number; // Days before due date to remind
+  reminderSettings?: {
+    enabled: boolean;
+    daysBefore: number;
+  };
+  paymentAutomation?: PaymentAutomationType; // New field for payment automation
+  nextPaymentDate?: string; // ISO string for next scheduled payment
+  suggestedPaymentAmount?: number; // Suggested amount for next payment
+  lastAutoPaymentDate?: string; // ISO string for last auto-payment date
 }
 
 export interface Loan {
@@ -54,8 +69,14 @@ export interface Loan {
     description?: string;
     status: 'active' | 'completed' | 'defaulted';
     currency?: string; // Currency code
-    reminderEnabled?: boolean; // Whether reminders are enabled
-    reminderDays?: number; // Days before due date to remind
+    reminderSettings?: {
+      enabled: boolean;
+      daysBefore: number;
+    };
+    isRecurring?: boolean; // Optional for recurring loans
+    recurrenceSettings?: RecurrenceSettings; // Enhanced recurring settings
+    nextPaymentDate?: string; // ISO string for next scheduled payment
+    suggestedPaymentAmount?: number; // Suggested amount for next payment
 }
 
 export interface AmortizationEntry {
@@ -73,3 +94,4 @@ export interface NotificationSettings {
   emailNotifications?: boolean;
   browserNotifications?: boolean;
 }
+

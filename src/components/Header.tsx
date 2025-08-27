@@ -1,5 +1,6 @@
 import React from 'react';
 import { SunIcon, MoonIcon, Cog6ToothIcon, BellIcon } from './common/Icons';
+import Version from './Version';
 
 interface HeaderProps {
   isDarkMode: boolean;
@@ -14,10 +15,15 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, toggleDarkMode, onSettingsC
     <header className="bg-white dark:bg-slate-800 shadow-md sticky top-0 z-10 transition-colors duration-300">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
-          <h1 className="text-2xl font-bold text-primary-600 dark:text-primary-400">
-            LoanDash
-          </h1>
+          <div className="flex items-center">
+            <img 
+              src="/logo.png" 
+              alt="LoanDash" 
+              className="h-10 w-auto object-contain"
+            />
+          </div>
           <div className="flex items-center gap-2">
+            <Version className="mr-2" />
             <button
                 onClick={onNotificationClick}
                 className="relative p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"

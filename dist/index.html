@@ -5,8 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LoanDash</title>
-  <script type="module" crossorigin src="/assets/index-CB_-q8St.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-fORz-Mo6.css">
+    <script>
+        // Polyfill for crypto.randomUUID() for environments that don't support it
+        if (!crypto.randomUUID) {
+          crypto.randomUUID = function() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+              const r = Math.random() * 16 | 0;
+              const v = c === 'x' ? r : (r & 0x3 | 0x8);
+              return v.toString(16);
+            });
+          };
+        }
+    </script>
+  <script type="module" crossorigin src="/assets/index-DI4XG_L9.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CqJu2Rdt.css">
 </head>
 <body class="bg-slate-100 dark:bg-slate-900">
 <div id="root"></div>

@@ -4,34 +4,28 @@
 
 import React, { useState } from 'react';
 import type { Debt, Payment } from '../types';
-import { DebtType } from '../types';
+import { DebtType, PaymentAutomationType } from '../types';
 import Card from './common/Card';
 import ProgressBar from './common/ProgressBar';
 import { ChevronDownIcon, PencilIcon } from './common/Icons';
+import { PaymentModal } from './PaymentModal';
+import { formatCurrency } from '../utils/currency';
 
 type DebtWithInterest = Debt & { accruedInterest: number };
 
 interface DebtsProps {
   debts: DebtWithInterest[];
+  defaultCurrency: string;
   onAddPayment: (debtId: string, payment: Omit<Payment, 'id'>) => void;
+  onUpdatePayment: (debtId: string, paymentId: string, payment: Omit<Payment, 'id'>) => void;
   onArchiveDebt: (debtId: string, status: 'completed' | 'defaulted') => void;
   onEdit: (debtId: string) => void;
 }
 
-const currencyFormatter = {
-    format: (value: number) => {
-        const formattedValue = new Intl.NumberFormat('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(value);
-        return `${formattedValue} DH`;
-    }
-};
-
-const DebtItem: React.FC<{ debt: DebtWithInterest; onAddPayment: DebtsProps['onAddPayment']; onArchiveDebt: DebtsProps['onArchiveDebt']; onEdit: DebtsProps['onEdit'] }> = ({ debt, onAddPayment, onArchiveDebt, onEdit }) => {
+const DebtItem: React.FC<{ debt: DebtWithInterest; defaultCurrency: string; onAddPayment: DebtsProps['onAddPayment']; onUpdatePayment: DebtsProps['onUpdatePayment']; onArchiveDebt: DebtsProps['onArchiveDebt']; onEdit: DebtsProps['onEdit'] }> = ({ debt, defaultCurrency, onAddPayment, onUpdatePayment, onArchiveDebt, onEdit }) => {
   const [expanded, setExpanded] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<Payment | undefined>(undefined);
 
   const totalPaid = debt.payments.reduce((sum, p) => sum + p.amount, 0);
   const totalOwedWithInterest = debt.totalAmount + debt.accruedInterest;
@@ -40,13 +34,16 @@ const DebtItem: React.FC<{ debt: DebtWithInterest; onAddPayment: DebtsProps['onA
   const isPaidOff = remaining <= 0.01;
   const isOverdue = debt.dueDate && new Date(debt.dueDate) < new Date() && !isPaidOff;
 
-  const handleAddPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = parseFloat(paymentAmount);
-    if (!isNaN(amount) && amount > 0 && paymentDate) {
-      onAddPayment(debt.id, { amount, date: new Date(paymentDate).toISOString() });
-      setPaymentAmount('');
-    }
+  const handleAddPayment = (payment: Omit<Payment, 'id'>) => {
+    onAddPayment(debt.id, payment);
+    setShowPaymentModal(false);
+    setEditingPayment(undefined);
+  };
+
+  const handleUpdatePayment = (paymentId: string, payment: Omit<Payment, 'id'>) => {
+    onUpdatePayment(debt.id, paymentId, payment);
+    setShowPaymentModal(false);
+    setEditingPayment(undefined);
   };
   
   const handleArchive = () => {
@@ -58,8 +55,19 @@ const DebtItem: React.FC<{ debt: DebtWithInterest; onAddPayment: DebtsProps['onA
     onEdit(debt.id);
   };
 
+  const handleEditPayment = (payment: Payment, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingPayment(payment);
+    setShowPaymentModal(true);
+  };
+
   const handleExpansionToggle = () => {
     setExpanded(!expanded);
+  };
+
+  const handleCloseModal = () => {
+    setShowPaymentModal(false);
+    setEditingPayment(undefined);
   };
 
   return (
@@ -69,18 +77,49 @@ const DebtItem: React.FC<{ debt: DebtWithInterest; onAddPayment: DebtsProps['onA
           <h4 className="font-bold text-lg text-slate-800 dark:text-slate-100">{debt.name}</h4>
           <p className="text-sm text-slate-500 dark:text-slate-400">{debt.type}</p>
           {debt.dueDate && !isPaidOff && (
-            <p className={`text-xs mt-1 ${isOverdue ? 'text-red-500 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
-                Due: {new Date(debt.dueDate).toLocaleDateString()}
-            </p>
+          <p className={`text-xs mt-1 ${isOverdue ? 'text-red-500 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
+              Due: {new Date(debt.dueDate).toLocaleDateString()}
+          </p>
+          )}
+          {/* Display next payment info for auto-payment and recurring debts */}
+          {debt.nextPaymentDate && debt.suggestedPaymentAmount && !isPaidOff && (
+            <div className="mt-1">
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                Next Payment: {new Date(debt.nextPaymentDate).toLocaleDateString()} 
+                <span className="ml-1 font-semibold">
+                  ({formatCurrency(debt.suggestedPaymentAmount, defaultCurrency)})
+                </span>
+              </p>
+              {debt.paymentAutomation === PaymentAutomationType.Auto && (
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  🤖 Auto-payment enabled
+                </p>
+              )}
+              {debt.isRecurring && debt.recurrenceSettings && (
+                <div className="text-xs text-purple-600 dark:text-purple-400">
+                  <p>🔄 Recurring ({debt.recurrenceSettings.type})</p>
+                  {debt.recurrenceSettings.firstPaymentDate && (
+                    <p className="mt-0.5">
+                      📅 Started: {new Date(debt.recurrenceSettings.firstPaymentDate).toLocaleDateString()}
+                    </p>
+                  )}
+                  {debt.recurrenceSettings.paymentAmount && (
+                    <p className="mt-0.5">
+                      💰 Amount: {formatCurrency(debt.recurrenceSettings.paymentAmount, defaultCurrency)} per payment
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className={`font-semibold text-lg ${isPaidOff ? 'text-green-500' : 'text-slate-800 dark:text-slate-100'}`}>{currencyFormatter.format(Math.max(0, remaining))}</p>
+              <p className={`font-semibold text-lg ${isPaidOff ? 'text-green-500' : 'text-slate-800 dark:text-slate-100'}`}>{formatCurrency(Math.max(0, remaining), defaultCurrency)}</p>
               {debt.type === DebtType.Loan && debt.accruedInterest > 0 && !isPaidOff ? (
-                <p className="text-xs text-slate-500">(includes {currencyFormatter.format(debt.accruedInterest)} interest)</p>
+                <p className="text-xs text-slate-500">(includes {formatCurrency(debt.accruedInterest, defaultCurrency)} interest)</p>
               ) : (
-                <p className="text-xs text-slate-500">of {currencyFormatter.format(debt.totalAmount)}</p>
+                <p className="text-xs text-slate-500">of {formatCurrency(debt.totalAmount, defaultCurrency)}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -112,9 +151,25 @@ const DebtItem: React.FC<{ debt: DebtWithInterest; onAddPayment: DebtsProps['onA
           {debt.payments.length > 0 ? (
             <ul className="space-y-2 max-h-40 overflow-y-auto pr-2">
               {debt.payments.map(p => (
-                <li key={p.id} className="flex justify-between items-center text-sm bg-slate-100 dark:bg-slate-700/50 p-2 rounded-md">
-                  <span>{new Date(p.date).toLocaleDateString()}</span>
-                  <span className="font-medium">{currencyFormatter.format(p.amount)}</span>
+                <li key={p.id} className="flex justify-between items-center text-sm bg-slate-100 dark:bg-slate-700/50 p-2 rounded-md group">
+                  <div>
+                    <span>{new Date(p.date).toLocaleDateString()}</span>
+                    {p.method && <span className="ml-2 text-xs text-slate-500">({p.method})</span>}
+                    {p.isPartial && <span className="ml-2 text-xs text-orange-500">(Partial)</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <span className="font-medium">{formatCurrency(p.amount, defaultCurrency)}</span>
+                      {p.notes && <div className="text-xs text-slate-500 mt-1">{p.notes}</div>}
+                    </div>
+                    <button
+                      onClick={(e) => handleEditPayment(p, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                      aria-label="Edit payment"
+                    >
+                      <PencilIcon className="w-3 h-3" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -132,38 +187,38 @@ const DebtItem: React.FC<{ debt: DebtWithInterest; onAddPayment: DebtsProps['onA
                 </button>
             </div>
           ) : (
-            <form onSubmit={handleAddPayment} className="mt-4 flex flex-wrap items-center gap-2">
-                <input
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                className="bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md py-2 px-3 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                required
-                />
-                <input
-                type="number"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="Payment amount"
-                className="flex-grow bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md py-2 px-3 text-sm text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                required
-                />
-                <button type="submit" className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-primary-700 transition-colors">
-                Log Payment
-                </button>
-            </form>
+            <div className="mt-4">
+              <button 
+                onClick={() => setShowPaymentModal(true)}
+                className="w-full bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-primary-700 transition-colors"
+              >
+                Record Payment
+              </button>
+            </div>
           )}
         </div>
       )}
+      
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={handleCloseModal}
+        onSubmit={handleAddPayment}
+        onUpdate={handleUpdatePayment}
+        maxAmount={remaining}
+        currency={defaultCurrency}
+        itemType="debt"
+        itemName={debt.name}
+        editingPayment={editingPayment}
+      />
     </Card>
   );
 };
 
-const Debts: React.FC<DebtsProps> = ({ debts, onAddPayment, onArchiveDebt, onEdit }) => {
+const Debts: React.FC<DebtsProps> = ({ debts, defaultCurrency, onAddPayment, onUpdatePayment, onArchiveDebt, onEdit }) => {
   return (
     <div>
       {debts.length > 0 ? (
-        debts.map(debt => <DebtItem key={debt.id} debt={debt} onAddPayment={onAddPayment} onArchiveDebt={onArchiveDebt} onEdit={onEdit} />)
+        debts.map(debt => <DebtItem key={debt.id} debt={debt} defaultCurrency={defaultCurrency} onAddPayment={onAddPayment} onUpdatePayment={onUpdatePayment} onArchiveDebt={onArchiveDebt} onEdit={onEdit} />)
       ) : (
         <Card className="text-center">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">No Debts Found</h3>

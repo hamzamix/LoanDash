@@ -26,14 +26,14 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center transition-opacity duration-300"
+      className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center transition-opacity duration-300 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-slate-100 dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md m-4 transform transition-all duration-300 scale-95"
+        className="bg-slate-100 dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col transform transition-all duration-300 scale-95"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{title}</h2>
           <button
             onClick={onClose}
@@ -42,7 +42,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           {children}
         </div>
       </div>

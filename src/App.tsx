@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Debt, DebtType, Loan, Payment, RecurrenceType, RecurrenceSettings, NotificationSettings } from './types';
+import { Debt, DebtType, Loan, Payment, RecurrenceType, RecurrenceSettings, NotificationSettings, PaymentAutomationType } from './types';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import DebtsComponent from './components/Debts';
 import LoansComponent from './components/Loans';
 import ArchiveComponent from './components/Archive';
 import Modal from './components/common/Modal';
+import UpdateNotification from './components/UpdateNotification';
 import { PlusIcon, MagnifyingGlassIcon, ArrowDownTrayIcon } from './components/common/Icons';
 import { formatCurrency, SUPPORTED_CURRENCIES } from './utils/currency';
 import { calculateNextDueDate, getRecurrenceDescription } from './utils/recurrence';
 
 type ActiveTab = 'dashboard' | 'debts' | 'loans' | 'archive';
-type AutoArchiveSetting = 'never' | 'immediate' | '1day' | '7days';
+type AutoArchiveSetting = 'never' | 'immediately' | '1day' | '7days';
 
 type AppState = {
   'loandash-dark-mode': boolean;
@@ -72,11 +73,13 @@ const App: React.FC = () => {
   const [newDebtInterestRate, setNewDebtInterestRate] = useState('');
   const [newDebtIsRecurring, setNewDebtIsRecurring] = useState(false);
   const [newDebtRecurrenceType, setNewDebtRecurrenceType] = useState<RecurrenceType>(RecurrenceType.Monthly);
-  const [newDebtRecurrenceEndDate, setNewDebtRecurrenceEndDate] = useState('');
   const [newDebtRecurrenceMaxOccurrences, setNewDebtRecurrenceMaxOccurrences] = useState('');
+  const [newDebtRecurrenceFirstPaymentDate, setNewDebtRecurrenceFirstPaymentDate] = useState('');
+  const [newDebtRecurrencePaymentAmount, setNewDebtRecurrencePaymentAmount] = useState('');
   const [newDebtCurrency, setNewDebtCurrency] = useState('');
   const [newDebtReminderEnabled, setNewDebtReminderEnabled] = useState(true);
   const [newDebtReminderDays, setNewDebtReminderDays] = useState('3');
+  const [newDebtPaymentAutomation, setNewDebtPaymentAutomation] = useState<PaymentAutomationType>(PaymentAutomationType.Manual);
   
   const [newLoanName, setNewLoanName] = useState('');
   const [newLoanAmount, setNewLoanAmount] = useState('');
@@ -86,6 +89,11 @@ const App: React.FC = () => {
   const [newLoanCurrency, setNewLoanCurrency] = useState('');
   const [newLoanReminderEnabled, setNewLoanReminderEnabled] = useState(true);
   const [newLoanReminderDays, setNewLoanReminderDays] = useState('3');
+  const [newLoanIsRecurring, setNewLoanIsRecurring] = useState(false);
+  const [newLoanRecurrenceType, setNewLoanRecurrenceType] = useState<RecurrenceType>(RecurrenceType.Monthly);
+  const [newLoanRecurrenceMaxOccurrences, setNewLoanRecurrenceMaxOccurrences] = useState('');
+  const [newLoanRecurrenceFirstPaymentDate, setNewLoanRecurrenceFirstPaymentDate] = useState('');
+  const [newLoanRecurrencePaymentAmount, setNewLoanRecurrencePaymentAmount] = useState('');
 
   const {
     'loandash-dark-mode': isDarkMode,
@@ -109,11 +117,32 @@ const App: React.FC = () => {
       if (!response.ok) {
         throw new Error(`Server responded with ${response.status}`);
       }
-      return true;
     } catch (error) {
       console.error('Failed to save data:', error);
       alert('Error: Could not save data. Your changes were not saved. Please check your connection and try again.');
-      return false;
+    }
+  };
+  
+  // Function to refresh data from server after processing
+  const refreshDataFromServer = async () => {
+    try {
+      const response = await fetch('/api/data');
+      if (response.ok) {
+        const data = await response.json();
+        setAppState({
+          'loandash-dark-mode': data['loandash-dark-mode'] ?? appState['loandash-dark-mode'],
+          'loandash-debts': data['loandash-debts'] ?? [],
+          'loandash-loans': data['loandash-loans'] ?? [],
+          'loandash-archived-debts': data['loandash-archived-debts'] ?? [],
+          'loandash-archived-loans': data['loandash-archived-loans'] ?? [],
+          'loandash-auto-archive': data['loandash-auto-archive'] ?? appState['loandash-auto-archive'],
+          'loandash-default-currency': data['loandash-default-currency'] ?? appState['loandash-default-currency'],
+          'loandash-notification-settings': data['loandash-notification-settings'] ?? appState['loandash-notification-settings'],
+        });
+      }
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+      // Don't show alert for refresh failures, just log them
     }
   };
   
@@ -198,11 +227,27 @@ const App: React.FC = () => {
     const now = new Date();
     const overdueDebts = debtsWithInterest.filter(d => {
         const remaining = d.totalAmount + d.accruedInterest - d.payments.reduce((sum, p) => sum + p.amount, 0);
-        return remaining > 0 && new Date(d.dueDate) < now;
+        if (remaining <= 0) return false;
+        
+        // For recurring debts, use nextPaymentDate if available, otherwise use dueDate
+        if (d.isRecurring && d.nextPaymentDate) {
+            return new Date(d.nextPaymentDate) < now;
+        }
+        
+        // For non-recurring debts, use traditional dueDate logic
+        return !d.isRecurring && new Date(d.dueDate) < now;
     });
     const overdueLoans = loans.filter(l => {
         const remaining = l.totalAmount - l.repayments.reduce((sum, p) => sum + p.amount, 0);
-        return remaining > 0 && new Date(l.dueDate) < now;
+        if (remaining <= 0) return false;
+        
+        // For recurring loans, use nextPaymentDate if available, otherwise use dueDate
+        if (l.isRecurring && l.nextPaymentDate) {
+            return new Date(l.nextPaymentDate) < now;
+        }
+        
+        // For non-recurring loans, use traditional dueDate logic
+        return !l.isRecurring && new Date(l.dueDate) < now;
     });
     return {
         overdueCount: overdueDebts.length + overdueLoans.length,
@@ -238,6 +283,14 @@ const App: React.FC = () => {
     setNewDebtDescription(debtToEdit ? debtToEdit.description || '' : '');
     setNewDebtInterestRate(debtToEdit && debtToEdit.interestRate ? String(debtToEdit.interestRate) : '');
     setNewDebtIsRecurring(debtToEdit ? debtToEdit.isRecurring || false : false);
+    setNewDebtRecurrenceType(debtToEdit?.recurrenceSettings?.type || RecurrenceType.Monthly);
+
+    setNewDebtRecurrenceFirstPaymentDate(debtToEdit?.recurrenceSettings?.firstPaymentDate ? new Date(debtToEdit.recurrenceSettings.firstPaymentDate).toISOString().split('T')[0] : '');
+    setNewDebtRecurrencePaymentAmount(debtToEdit?.recurrenceSettings?.paymentAmount ? String(debtToEdit.recurrenceSettings.paymentAmount) : '');
+    setNewDebtCurrency(debtToEdit?.currency || defaultCurrency);
+    setNewDebtReminderEnabled(debtToEdit?.reminderSettings?.enabled ?? true);
+    setNewDebtReminderDays(debtToEdit?.reminderSettings?.daysBefore ? String(debtToEdit.reminderSettings.daysBefore) : '3');
+    setNewDebtPaymentAutomation(debtToEdit?.paymentAutomation || PaymentAutomationType.Manual);
     
     setIsDebtModalOpen(true);
   };
@@ -252,17 +305,26 @@ const App: React.FC = () => {
     setNewLoanStartDate(loanToEdit ? new Date(loanToEdit.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
     setNewLoanDueDate(loanToEdit ? new Date(loanToEdit.dueDate).toISOString().split('T')[0] : getFutureDateString(1));
     setNewLoanDescription(loanToEdit ? loanToEdit.description || '' : '');
+    setNewLoanCurrency(loanToEdit?.currency || defaultCurrency);
+    setNewLoanReminderEnabled(loanToEdit?.reminderSettings?.enabled ?? true);
+    setNewLoanReminderDays(loanToEdit?.reminderSettings?.daysBefore ? String(loanToEdit.reminderSettings.daysBefore) : '3');
+    setNewLoanIsRecurring(loanToEdit ? loanToEdit.isRecurring || false : false);
+    setNewLoanRecurrenceType(loanToEdit?.recurrenceSettings?.type || RecurrenceType.Monthly);
+    setNewLoanRecurrenceMaxOccurrences(loanToEdit?.recurrenceSettings?.maxOccurrences ? String(loanToEdit.recurrenceSettings.maxOccurrences) : '');
+    setNewLoanRecurrenceFirstPaymentDate(loanToEdit?.recurrenceSettings?.firstPaymentDate ? new Date(loanToEdit.recurrenceSettings.firstPaymentDate).toISOString().split('T')[0] : '');
+    setNewLoanRecurrencePaymentAmount(loanToEdit?.recurrenceSettings?.paymentAmount ? String(loanToEdit.recurrenceSettings.paymentAmount) : '');
     
     setIsLoanModalOpen(true);
   };
 
   // --- Data Mutation Handlers ---
-  const handleStateChange = async (newState: AppState) => {
-    const success = await saveAllData(newState);
-    if (success) {
-      setAppState(newState);
-    }
-    return success;
+  const handleStateChange = (newState: AppState) => {
+    setAppState(newState);
+    saveAllData(newState);
+    // Refresh data from server after a short delay to get processed data
+    setTimeout(() => {
+      refreshDataFromServer();
+    }, 500);
   };
 
   const toggleDarkMode = () => {
@@ -317,119 +379,303 @@ const App: React.FC = () => {
     };
     
     const totalPaid = updatedDebt.payments.reduce((sum, p) => sum + p.amount, 0);
-    const totalOwedWithInterest = debtWithInterest.totalAmount + debtWithInterest.accruedInterest;
-    const isPaidOff = totalOwedWithInterest - totalPaid <= 0.01;
-  
-    if (updatedDebt.isRecurring && isPaidOff) {
-      const newDueDate = new Date(updatedDebt.dueDate);
-      newDueDate.setMonth(newDueDate.getMonth() + 1);
-      const nextDebt: Debt = { ...updatedDebt, payments: [], id: crypto.randomUUID(), dueDate: newDueDate.toISOString(), startDate: new Date().toISOString() };
-      
-      const nextDebts = debts.map(d => d.id === debtId ? nextDebt : d);
-      const nextArchived = [...archivedDebts, { ...updatedDebt, status: 'completed' as const }];
-      handleStateChange({ ...appState, 'loandash-debts': nextDebts, 'loandash-archived-debts': nextArchived });
-    } else {
-      const nextDebts = debts.map(d => d.id === debtId ? updatedDebt : d);
-      handleStateChange({ ...appState, 'loandash-debts': nextDebts });
+    const totalOwed = updatedDebt.totalAmount + (debtWithInterest.accruedInterest || 0);
+    
+    if (totalPaid >= totalOwed) {
+      updatedDebt.status = 'completed';
     }
+    
+    const nextDebts = debts.map(d => d.id === debtId ? updatedDebt : d);
+    handleStateChange({ ...appState, 'loandash-debts': nextDebts });
   };
 
+  const handleUpdatePayment = (debtId: string, paymentId: string, updatedPayment: Omit<Payment, 'id'>) => {
+    const debt = debts.find(d => d.id === debtId);
+    if (!debt) return;
+
+    const updatedDebt: Debt = {
+      ...debt,
+      payments: debt.payments.map(p => 
+        p.id === paymentId ? { ...updatedPayment, id: paymentId } : p
+      )
+    };
+
+    const debtWithInterest = debtsWithInterest.find(d => d.id === debtId);
+    const totalPaid = updatedDebt.payments.reduce((sum, p) => sum + p.amount, 0);
+    const totalOwed = updatedDebt.totalAmount + (debtWithInterest?.accruedInterest || 0);
+    
+    if (totalPaid >= totalOwed) {
+      updatedDebt.status = 'completed';
+    } else {
+      updatedDebt.status = 'active';
+    }
+    
+    const nextDebts = debts.map(d => d.id === debtId ? updatedDebt : d);
+    handleStateChange({ ...appState, 'loandash-debts': nextDebts });
+  };
+  
   const handleAddRepayment = (loanId: string, repayment: Omit<Payment, 'id'>) => {
-    const nextLoans = loans.map(l => l.id === loanId ? { ...l, repayments: [...l.repayments, { ...repayment, id: crypto.randomUUID() }] } : l);
+    const loan = loans.find(l => l.id === loanId);
+    if (!loan) return;
+  
+    const updatedLoan: Loan = {
+      ...loan,
+      repayments: [...loan.repayments, { ...repayment, id: crypto.randomUUID() }]
+    };
+    
+    const totalRepaid = updatedLoan.repayments.reduce((sum, p) => sum + p.amount, 0);
+    
+    if (totalRepaid >= updatedLoan.totalAmount) {
+      updatedLoan.status = 'completed';
+    }
+    
+    const nextLoans = loans.map(l => l.id === loanId ? updatedLoan : l);
     handleStateChange({ ...appState, 'loandash-loans': nextLoans });
   };
-  
-  // --- Form Submissions ---
-  const validateDebtForm = (): string[] => {
-    const errors: string[] = [];
-    const amount = parseFloat(newDebtAmount);
-    
-    if (!newDebtName.trim()) errors.push('Lender name is required.');
-    if (isNaN(amount) || amount <= 0) errors.push('Total Amount must be a positive number.');
-    if (!newDebtStartDate) errors.push('Date Taken is required.');
-    if (!newDebtDueDate) errors.push('Return Date is required.');
-    if (newDebtStartDate && newDebtDueDate && new Date(newDebtDueDate) < new Date(newDebtStartDate)) {
-        errors.push('Return Date cannot be before Date Taken.');
-    }
-    if (newDebtType === DebtType.Loan && newDebtInterestRate) {
-        const rate = parseFloat(newDebtInterestRate);
-        if (isNaN(rate) || rate < 0) {
-            errors.push('Interest Rate must be a valid number (0 or greater).');
-        }
-    }
-    return errors;
-  }
 
-  const handleDebtFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const validationErrors = validateDebtForm();
-    if (validationErrors.length > 0) {
-      setFormErrors(validationErrors);
-      return;
-    }
-    
-    const amount = parseFloat(newDebtAmount);
-    const interestRate = newDebtType === DebtType.Loan && newDebtInterestRate ? parseFloat(newDebtInterestRate) : undefined;
-    const debtData = { 
-      name: newDebtName, totalAmount: amount, type: newDebtType,
-      startDate: new Date(newDebtStartDate).toISOString(), dueDate: new Date(newDebtDueDate).toISOString(),
-      description: newDebtDescription, interestRate: interestRate,
-      isRecurring: newDebtType === DebtType.Loan ? false : newDebtIsRecurring,
+  const handleUpdateRepayment = (loanId: string, repaymentId: string, updatedRepayment: Omit<Payment, 'id'>) => {
+    const loan = loans.find(l => l.id === loanId);
+    if (!loan) return;
+
+    const updatedLoan: Loan = {
+      ...loan,
+      repayments: loan.repayments.map(r => 
+        r.id === repaymentId ? { ...updatedRepayment, id: repaymentId } : r
+      )
     };
 
-    let nextState: AppState;
-    if (editingDebtId) {
-      const nextDebts = debts.map(d => d.id === editingDebtId ? { ...d, ...debtData } : d);
-      nextState = { ...appState, 'loandash-debts': nextDebts };
+    const totalRepaid = updatedLoan.repayments.reduce((sum, p) => sum + p.amount, 0);
+    
+    if (totalRepaid >= updatedLoan.totalAmount) {
+      updatedLoan.status = 'completed';
     } else {
-      const newDebt: Debt = { ...debtData, id: crypto.randomUUID(), payments: [], status: 'active' };
-      nextState = { ...appState, 'loandash-debts': [...debts, newDebt] };
+      updatedLoan.status = 'active';
     }
     
-    const success = await handleStateChange(nextState);
-    if (success) resetAndCloseForms();
+    const nextLoans = loans.map(l => l.id === loanId ? updatedLoan : l);
+    handleStateChange({ ...appState, 'loandash-loans': nextLoans });
   };
 
-  const validateLoanForm = (): string[] => {
-    const errors: string[] = [];
-    const amount = parseFloat(newLoanAmount);
-
-    if (!newLoanName.trim()) errors.push('Borrower name is required.');
-    if (isNaN(amount) || amount <= 0) errors.push('Total Amount must be a positive number.');
-    if (!newLoanStartDate) errors.push('Date Loaned is required.');
-    if (!newLoanDueDate) errors.push('Repayment Date is required.');
-    if (newLoanStartDate && newLoanDueDate && new Date(newLoanDueDate) < new Date(newLoanStartDate)) {
-        errors.push('Repayment Date cannot be before Date Loaned.');
-    }
-    return errors;
-  }
-
-  const handleLoanFormSubmit = async (e: React.FormEvent) => {
+  // --- Form Submission Handlers ---
+  const handleDebtFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const validationErrors = validateLoanForm();
-    if (validationErrors.length > 0) {
-        setFormErrors(validationErrors);
-        return;
+    setFormErrors([]);
+    
+    const errors: string[] = [];
+    if (!newDebtName.trim()) errors.push('Name is required');
+    if (!newDebtAmount || parseFloat(newDebtAmount) <= 0) errors.push('Amount must be greater than 0');
+    if (parseFloat(newDebtAmount) > 999999999) errors.push('Amount is too large');
+    if (!newDebtStartDate) errors.push('Start date is required');
+    if (!newDebtIsRecurring && !(newDebtType === DebtType.Loan && newDebtPaymentAutomation === PaymentAutomationType.Auto) && !newDebtDueDate) errors.push('Due date is required');
+    if (!newDebtIsRecurring && !(newDebtType === DebtType.Loan && newDebtPaymentAutomation === PaymentAutomationType.Auto) && new Date(newDebtStartDate) > new Date(newDebtDueDate)) errors.push('Due date must be after start date');
+    if (new Date(newDebtStartDate) > new Date()) errors.push('Start date cannot be in the future');
+    if (newDebtType === DebtType.Loan && newDebtInterestRate && parseFloat(newDebtInterestRate) < 0) errors.push('Interest rate cannot be negative');
+    if (newDebtReminderEnabled && (!newDebtReminderDays || parseInt(newDebtReminderDays) < 0 || parseInt(newDebtReminderDays) > 365)) errors.push('Reminder days must be between 0 and 365');
+    
+    if (errors.length > 0) {
+      setFormErrors(errors);
+      return;
     }
 
-    const amount = parseFloat(newLoanAmount);
-    const loanData = { 
-      name: newLoanName, totalAmount: amount,
-      startDate: new Date(newLoanStartDate).toISOString(), dueDate: new Date(newLoanDueDate).toISOString(),
-      description: newLoanDescription,
+    const debtData: Debt = {
+      id: editingDebtId || crypto.randomUUID(),
+      type: newDebtType,
+      name: newDebtName.trim(),
+      totalAmount: parseFloat(newDebtAmount),
+      startDate: newDebtStartDate,
+      dueDate: newDebtIsRecurring ? 
+        (() => {
+          // For recurring debts, calculate when debt will be fully paid based on payment schedule
+          const totalAmount = parseFloat(newDebtAmount);
+          const paymentAmount = newDebtRecurrencePaymentAmount ? 
+            parseFloat(newDebtRecurrencePaymentAmount) : (totalAmount / 10); // Default to 10 payments if not specified
+          
+          const firstPaymentDate = new Date(newDebtRecurrenceFirstPaymentDate || newDebtStartDate);
+          const paymentsNeeded = Math.ceil(totalAmount / paymentAmount);
+          
+          // Calculate days between payments based on recurrence type
+          let daysBetweenPayments = 30; // Default to monthly
+          switch (newDebtRecurrenceType) {
+            case 'daily': daysBetweenPayments = 1; break;
+            case 'weekly': daysBetweenPayments = 7; break;
+            case 'bi-weekly': daysBetweenPayments = 14; break;
+            case 'monthly': daysBetweenPayments = 30; break;
+            case 'quarterly': daysBetweenPayments = 90; break;
+            case 'yearly': daysBetweenPayments = 365; break;
+          }
+          
+          // Calculate the expected completion date (last payment date)
+          const completionDate = new Date(firstPaymentDate);
+          completionDate.setDate(completionDate.getDate() + ((paymentsNeeded - 1) * daysBetweenPayments));
+          
+          return completionDate.toISOString().split('T')[0];
+        })() : 
+        newDebtType === DebtType.Loan && newDebtPaymentAutomation === PaymentAutomationType.Auto ? 
+        (() => {
+          // For bank loans with auto-payment, calculate completion date based on monthly payments
+          const totalAmount = parseFloat(newDebtAmount);
+          const monthlyPayment = newDebtRecurrencePaymentAmount ? 
+            parseFloat(newDebtRecurrencePaymentAmount) : (totalAmount / 12); // Default to 12 months if not specified
+          
+          const firstPaymentDate = new Date(newDebtRecurrenceFirstPaymentDate || newDebtStartDate);
+          const monthsNeeded = Math.ceil(totalAmount / monthlyPayment);
+          
+          // Calculate the expected completion date (last payment date)
+          // Use a more robust method to avoid month overflow issues
+          const completionDate = new Date(firstPaymentDate);
+          const targetYear = completionDate.getFullYear();
+          const targetMonth = completionDate.getMonth() + (monthsNeeded - 1);
+          const targetDay = completionDate.getDate();
+          
+          // Handle year overflow
+          const finalYear = targetYear + Math.floor(targetMonth / 12);
+          const finalMonth = targetMonth % 12;
+          
+          // Set the date components individually to avoid day overflow
+          completionDate.setFullYear(finalYear, finalMonth, 1);
+          
+          // Get the last day of the target month
+          const lastDayOfMonth = new Date(finalYear, finalMonth + 1, 0).getDate();
+          
+          // Set the day to the original day or the last day of the month, whichever is smaller
+          completionDate.setDate(Math.min(targetDay, lastDayOfMonth));
+          
+          return completionDate.toISOString().split('T')[0];
+        })() :
+        newDebtDueDate,
+      payments: editingDebtId ? debts.find(d => d.id === editingDebtId)?.payments || [] : [],
+      description: newDebtDescription.trim() || undefined,
+      interestRate: newDebtType === DebtType.Loan && newDebtInterestRate ? parseFloat(newDebtInterestRate) : undefined,
+      isRecurring: newDebtType !== DebtType.Loan ? newDebtIsRecurring : false,
+      recurrenceSettings: newDebtType !== DebtType.Loan && newDebtIsRecurring ? {
+        type: newDebtRecurrenceType,
+        maxOccurrences: newDebtRecurrenceMaxOccurrences ? parseInt(newDebtRecurrenceMaxOccurrences) : undefined,
+        firstPaymentDate: newDebtRecurrenceFirstPaymentDate || undefined,
+        paymentAmount: newDebtRecurrencePaymentAmount ? parseFloat(newDebtRecurrencePaymentAmount) : undefined
+      } : newDebtType === DebtType.Loan && (newDebtRecurrencePaymentAmount || newDebtRecurrenceFirstPaymentDate) ? {
+        type: RecurrenceType.Monthly,
+        firstPaymentDate: newDebtRecurrenceFirstPaymentDate || undefined,
+        paymentAmount: newDebtRecurrencePaymentAmount ? parseFloat(newDebtRecurrencePaymentAmount) : undefined
+      } : undefined,
+      status: 'active',
+      currency: newDebtCurrency,
+      reminderSettings: {
+        enabled: newDebtReminderEnabled,
+        daysBefore: parseInt(newDebtReminderDays)
+      },
+      paymentAutomation: newDebtType === DebtType.Loan ? newDebtPaymentAutomation : undefined
     };
+
+    const nextDebts = editingDebtId 
+      ? debts.map(d => d.id === editingDebtId ? debtData : d)
+      : [...debts, debtData];
     
-    let nextState: AppState;
-    if (editingLoanId) {
-      const nextLoans = loans.map(l => l.id === editingLoanId ? { ...l, ...loanData } : l);
-      nextState = { ...appState, 'loandash-loans': nextLoans };
-    } else {
-      const newLoan: Loan = { ...loanData, id: crypto.randomUUID(), repayments: [], status: 'active' };
-      nextState = { ...appState, 'loandash-loans': [...loans, newLoan] };
+    const nextState = { ...appState, 'loandash-debts': nextDebts };
+    
+    handleStateChange(nextState);
+    resetAndCloseForms();
+  };
+  
+  const handleLoanFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormErrors([]);
+    
+    const errors: string[] = [];
+    if (!newLoanName.trim()) errors.push('Name is required');
+    if (!newLoanAmount || parseFloat(newLoanAmount) <= 0) errors.push('Amount must be greater than 0');
+    if (parseFloat(newLoanAmount) > 999999999) errors.push('Amount is too large');
+    if (!newLoanStartDate) errors.push('Start date is required');
+    if (!newLoanIsRecurring && !newLoanDueDate) errors.push('Due date is required');
+    if (!newLoanIsRecurring && new Date(newLoanStartDate) > new Date(newLoanDueDate)) errors.push('Due date must be after start date');
+    if (new Date(newLoanStartDate) > new Date()) errors.push('Start date cannot be in the future');
+    if (newLoanReminderEnabled && (!newLoanReminderDays || parseInt(newLoanReminderDays) < 0 || parseInt(newLoanReminderDays) > 365)) errors.push('Reminder days must be between 0 and 365');
+    
+    if (errors.length > 0) {
+      setFormErrors(errors);
+      return;
     }
+
+    const loanData: Loan = {
+      id: editingLoanId || crypto.randomUUID(),
+      name: newLoanName.trim(),
+      totalAmount: parseFloat(newLoanAmount),
+      startDate: newLoanStartDate,
+      dueDate: newLoanIsRecurring ? 
+        (() => {
+          // For recurring loans, calculate when loan will be fully repaid based on payment schedule
+          const totalAmount = parseFloat(newLoanAmount);
+          const paymentAmount = newLoanRecurrencePaymentAmount ? 
+            parseFloat(newLoanRecurrencePaymentAmount) : (totalAmount / 10); // Default to 10 payments if not specified
+          
+          const firstPaymentDate = new Date(newLoanRecurrenceFirstPaymentDate || newLoanStartDate);
+          const paymentsNeeded = Math.ceil(totalAmount / paymentAmount);
+          
+          // Calculate days between payments based on recurrence type
+          let daysBetweenPayments = 30; // Default to monthly
+          switch (newLoanRecurrenceType) {
+            case RecurrenceType.Daily: daysBetweenPayments = 1; break;
+            case RecurrenceType.Weekly: daysBetweenPayments = 7; break;
+            case RecurrenceType.BiWeekly: daysBetweenPayments = 14; break;
+            case RecurrenceType.Monthly: daysBetweenPayments = 30; break;
+            case RecurrenceType.Quarterly: daysBetweenPayments = 90; break;
+            case RecurrenceType.Yearly: daysBetweenPayments = 365; break;
+          }
+          
+          // Calculate the expected completion date (last payment date)
+          // Use a more robust method to avoid month overflow issues for monthly payments
+          const completionDate = new Date(firstPaymentDate);
+          
+          if (newLoanRecurrenceType === RecurrenceType.Monthly) {
+            // For monthly payments, use setMonth to avoid day overflow issues
+            const targetYear = completionDate.getFullYear();
+            const targetMonth = completionDate.getMonth() + (paymentsNeeded - 1);
+            const targetDay = completionDate.getDate();
+            
+            // Handle year overflow
+            const finalYear = targetYear + Math.floor(targetMonth / 12);
+            const finalMonth = targetMonth % 12;
+            
+            // Set the date components individually to avoid day overflow
+            completionDate.setFullYear(finalYear, finalMonth, 1);
+            
+            // Get the last day of the target month
+            const lastDayOfMonth = new Date(finalYear, finalMonth + 1, 0).getDate();
+            
+            // Set the day to the original day or the last day of the month, whichever is smaller
+            completionDate.setDate(Math.min(targetDay, lastDayOfMonth));
+          } else {
+            // For non-monthly payments, use the original day-based calculation
+            completionDate.setDate(completionDate.getDate() + ((paymentsNeeded - 1) * daysBetweenPayments));
+          }
+          
+          return completionDate.toISOString().split('T')[0];
+        })() :
+        newLoanDueDate,
+      repayments: editingLoanId ? loans.find(l => l.id === editingLoanId)?.repayments || [] : [],
+      description: newLoanDescription.trim() || undefined,
+      status: 'active',
+      currency: newLoanCurrency,
+      reminderSettings: {
+        enabled: newLoanReminderEnabled,
+        daysBefore: parseInt(newLoanReminderDays)
+      },
+      isRecurring: newLoanIsRecurring,
+      recurrenceSettings: newLoanIsRecurring ? {
+        type: newLoanRecurrenceType,
+        maxOccurrences: newLoanRecurrenceMaxOccurrences ? parseInt(newLoanRecurrenceMaxOccurrences) : undefined,
+        firstPaymentDate: newLoanRecurrenceFirstPaymentDate || undefined,
+        paymentAmount: newLoanRecurrencePaymentAmount ? parseFloat(newLoanRecurrencePaymentAmount) : undefined
+      } : undefined
+    };
+
+    const nextLoans = editingLoanId 
+      ? loans.map(l => l.id === editingLoanId ? loanData : l)
+      : [...loans, loanData];
     
-    const success = await handleStateChange(nextState);
-    if (success) resetAndCloseForms();
+    const nextState = { ...appState, 'loandash-loans': nextLoans };
+    
+    handleStateChange(nextState);
+    resetAndCloseForms();
   };
   
   // --- CSV Export Function ---
@@ -456,7 +702,8 @@ const App: React.FC = () => {
           Description: debt.description || '',
           InterestRate: debt.interestRate || '',
           IsRecurring: debt.isRecurring ? 'Yes' : 'No',
-          PaymentCount: debt.payments.length
+          PaymentCount: debt.payments.length,
+          Currency: debt.currency || 'MAD'
         });
       });
       
@@ -478,7 +725,8 @@ const App: React.FC = () => {
           Description: loan.description || '',
           InterestRate: '',
           IsRecurring: 'No',
-          PaymentCount: loan.repayments.length
+          PaymentCount: loan.repayments.length,
+          Currency: loan.currency || 'MAD'
         });
       });
       
@@ -500,7 +748,8 @@ const App: React.FC = () => {
           Description: debt.description || '',
           InterestRate: debt.interestRate || '',
           IsRecurring: debt.isRecurring ? 'Yes' : 'No',
-          PaymentCount: debt.payments.length
+          PaymentCount: debt.payments.length,
+          Currency: debt.currency || 'MAD'
         });
       });
       
@@ -522,7 +771,8 @@ const App: React.FC = () => {
           Description: loan.description || '',
           InterestRate: '',
           IsRecurring: 'No',
-          PaymentCount: loan.repayments.length
+          PaymentCount: loan.repayments.length,
+          Currency: loan.currency || 'MAD'
         });
       });
       
@@ -599,17 +849,17 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard debts={debtsWithInterest} loans={loans} archivedDebts={archivedDebts} archivedLoans={archivedLoans} />;
-      case 'debts': return <DebtsComponent debts={filteredDebts} onAddPayment={handleAddPayment} onArchiveDebt={handleArchiveDebt} onEdit={(debtId) => {
+      case 'dashboard': return <Dashboard debts={debtsWithInterest} loans={loans} archivedDebts={archivedDebts} archivedLoans={archivedLoans} defaultCurrency={defaultCurrency} />;
+      case 'debts': return <DebtsComponent debts={filteredDebts} defaultCurrency={defaultCurrency} onAddPayment={handleAddPayment} onUpdatePayment={handleUpdatePayment} onArchiveDebt={handleArchiveDebt} onEdit={(debtId) => {
         const debt = debts.find(d => d.id === debtId);
         openDebtModal(debt || null);
       }} />;
-      case 'loans': return <LoansComponent loans={filteredLoans} onAddRepayment={handleAddRepayment} onArchiveLoan={handleArchiveLoan} onEdit={(loanId) => {
+      case 'loans': return <LoansComponent loans={filteredLoans} defaultCurrency={defaultCurrency} onAddRepayment={handleAddRepayment} onUpdateRepayment={handleUpdateRepayment} onArchiveLoan={handleArchiveLoan} onEdit={(loanId) => {
         const loan = loans.find(l => l.id === loanId);
         openLoanModal(loan || null);
       }} />;
-      case 'archive': return <ArchiveComponent archivedDebts={filteredArchivedDebts} archivedLoans={filteredArchivedLoans} onDeleteDebt={handleDeleteArchivedDebt} onDeleteLoan={handleDeleteArchivedLoan} />
-      default: return <Dashboard debts={debtsWithInterest} loans={loans} archivedDebts={archivedDebts} archivedLoans={archivedLoans} />;
+      case 'archive': return <ArchiveComponent archivedDebts={filteredArchivedDebts} archivedLoans={filteredArchivedLoans} defaultCurrency={defaultCurrency} onDeleteDebt={handleDeleteArchivedDebt} onDeleteLoan={handleDeleteArchivedLoan} />
+      default: return <Dashboard debts={debtsWithInterest} loans={loans} archivedDebts={archivedDebts} archivedLoans={archivedLoans} defaultCurrency={defaultCurrency} />;
     }
   };
 
@@ -623,6 +873,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-300">
       <Header isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} onSettingsClick={() => setIsSettingsModalOpen(true)} overdueCount={overdueCount} onNotificationClick={() => { if (hasOverdueDebts) setActiveTab('debts'); else if (hasOverdueLoans) setActiveTab('loans'); }} />
+      
+      <UpdateNotification />
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
             <div className="flex items-center gap-2 p-1 bg-slate-200 dark:bg-slate-800 rounded-lg">
@@ -667,17 +919,19 @@ const App: React.FC = () => {
           </div>
           <div>
             <label htmlFor="debtAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Total Amount Owed</label>
-            <input type="number" id="debtAmount" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="0.00 DH" />
+            <input type="number" id="debtAmount" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder={`0.00 ${defaultCurrency}`} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="debtStartDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Date Taken</label>
               <input type="date" id="debtStartDate" value={newDebtStartDate} onChange={e => setNewDebtStartDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
             </div>
-            <div>
-              <label htmlFor="debtDueDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Return Date</label>
-              <input type="date" id="debtDueDate" value={newDebtDueDate} onChange={e => setNewDebtDueDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
-            </div>
+            {!newDebtIsRecurring && !(newDebtType === DebtType.Loan && newDebtPaymentAutomation === PaymentAutomationType.Auto) && (
+              <div>
+                <label htmlFor="debtDueDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Return Date</label>
+                <input type="date" id="debtDueDate" value={newDebtDueDate} onChange={e => setNewDebtDueDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
+              </div>
+            )}
           </div>
           <div>
             <label htmlFor="debtType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Type</label>
@@ -687,9 +941,68 @@ const App: React.FC = () => {
             </select>
           </div>
           {newDebtType === DebtType.Loan && (
-            <div>
-              <label htmlFor="debtInterestRate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Annual Interest Rate (%) <span className="text-xs text-slate-500">(Optional)</span></label>
-              <input type="number" id="debtInterestRate" value={newDebtInterestRate} onChange={e => setNewDebtInterestRate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., 5.5" />
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="debtInterestRate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Annual Interest Rate (%) <span className="text-xs text-slate-500">(Optional)</span></label>
+                <input type="number" id="debtInterestRate" value={newDebtInterestRate} onChange={e => setNewDebtInterestRate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., 5.5" />
+              </div>
+              {newDebtPaymentAutomation === PaymentAutomationType.Auto && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="firstPaymentDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">First Payment Date</label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">When should the first automatic payment be processed?</p>
+                    <input type="date" id="firstPaymentDate" value={newDebtRecurrenceFirstPaymentDate} onChange={e => setNewDebtRecurrenceFirstPaymentDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
+                  </div>
+                  <div>
+                    <label htmlFor="monthlyPaymentAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Monthly Payment Amount <span className="text-xs text-slate-500">(Optional)</span></label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">How much will be paid each month? If not specified, amount will be calculated automatically.</p>
+                    <input type="number" id="monthlyPaymentAmount" value={newDebtRecurrencePaymentAmount} onChange={e => setNewDebtRecurrencePaymentAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., 500" />
+                  </div>
+                </div>
+              )}
+              {newDebtPaymentAutomation === PaymentAutomationType.Manual && (
+                <div>
+                  <label htmlFor="monthlyPaymentAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Monthly Payment Amount <span className="text-xs text-slate-500">(Optional)</span></label>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">How much will you pay each month? This helps calculate the due date automatically.</p>
+                  <input type="number" id="monthlyPaymentAmount" value={newDebtRecurrencePaymentAmount} onChange={e => setNewDebtRecurrencePaymentAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., 500" />
+                </div>
+              )}
+              <div>
+                <label htmlFor="debtPaymentAutomation" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Payment Processing</label>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Choose how payments will be recorded for this bank loan.</p>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <input 
+                      id="paymentManual" 
+                      type="radio" 
+                      name="paymentAutomation" 
+                      value={PaymentAutomationType.Manual}
+                      checked={newDebtPaymentAutomation === PaymentAutomationType.Manual}
+                      onChange={e => setNewDebtPaymentAutomation(e.target.value as PaymentAutomationType)}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300" 
+                    />
+                    <label htmlFor="paymentManual" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">
+                      Manual Payment Recording
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">I will manually record each payment when confirmed</span>
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input 
+                      id="paymentAuto" 
+                      type="radio" 
+                      name="paymentAutomation" 
+                      value={PaymentAutomationType.Auto}
+                      checked={newDebtPaymentAutomation === PaymentAutomationType.Auto}
+                      onChange={e => setNewDebtPaymentAutomation(e.target.value as PaymentAutomationType)}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300" 
+                    />
+                    <label htmlFor="paymentAuto" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">
+                      Automatic Payment Recording
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">App will automatically record monthly payments on scheduled dates</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
           <div>
@@ -697,14 +1010,58 @@ const App: React.FC = () => {
             <textarea id="debtDescription" rows={3} value={newDebtDescription} onChange={e => setNewDebtDescription(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., For concert tickets, to be paid back after next payday." />
           </div>
           {newDebtType !== DebtType.Loan && (
-            <div className="flex items-center">
-              <input id="isRecurring" type="checkbox" checked={newDebtIsRecurring} onChange={e => setNewDebtIsRecurring(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-              <label htmlFor="isRecurring" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">This is a recurring monthly debt</label>
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input id="isRecurring" type="checkbox" checked={newDebtIsRecurring} onChange={e => setNewDebtIsRecurring(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                <label htmlFor="isRecurring" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">This is a recurring debt</label>
+              </div>
+              {newDebtIsRecurring && (
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="recurrenceType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Recurrence Type</label>
+                    <select id="recurrenceType" value={newDebtRecurrenceType} onChange={e => setNewDebtRecurrenceType(e.target.value as RecurrenceType)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                      {Object.values(RecurrenceType).filter(type => type !== RecurrenceType.None).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="firstPaymentDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">First Payment Date</label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">When do you want to start making payments?</p>
+                      <input type="date" id="firstPaymentDate" value={newDebtRecurrenceFirstPaymentDate} onChange={e => setNewDebtRecurrenceFirstPaymentDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" />
+                    </div>
+                    <div>
+                      <label htmlFor="paymentAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Payment Amount <span className="text-xs text-slate-500">(Optional)</span></label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">How much will you pay each time?</p>
+                      <input type="number" id="paymentAmount" value={newDebtRecurrencePaymentAmount} onChange={e => setNewDebtRecurrencePaymentAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., 250" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <div>
+            <label htmlFor="debtCurrency" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Currency</label>
+            <select id="debtCurrency" value={newDebtCurrency} onChange={e => setNewDebtCurrency(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+              {SUPPORTED_CURRENCIES.map(currency => (
+                <option key={currency} value={currency}>{currency}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center">
+            <input id="debtReminderEnabled" type="checkbox" checked={newDebtReminderEnabled} onChange={e => setNewDebtReminderEnabled(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            <label htmlFor="debtReminderEnabled" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">Enable Reminders</label>
+          </div>
+          {newDebtReminderEnabled && (
+            <div>
+              <label htmlFor="debtReminderDays" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Remind me <span className="text-xs text-slate-500">(days before due date)</span></label>
+              <input type="number" id="debtReminderDays" value={newDebtReminderDays} onChange={e => setNewDebtReminderDays(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm" placeholder="e.g., 3" />
             </div>
           )}
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={resetAndCloseForms} className="px-4 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
-            <button type="submit" className="px-4 py-2 text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 transition-colors">{editingDebtId ? 'Save Changes' : 'Add Debt v11'}</button>
+            <button type="submit" className="px-4 py-2 text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 transition-colors">{editingDebtId ? 'Save Changes' : 'Add Debt'}</button>
           </div>
         </form>
       </Modal>
@@ -725,37 +1082,96 @@ const App: React.FC = () => {
           </div>
           <div>
             <label htmlFor="loanAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Total Amount Loaned</label>
-            <input type="number" id="loanAmount" value={newLoanAmount} onChange={e => setNewLoanAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" placeholder="0.00 DH" />
+            <input type="number" id="loanAmount" value={newLoanAmount} onChange={e => setNewLoanAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" placeholder={`0.00 ${defaultCurrency}`} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="loanStartDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Date Loaned</label>
               <input type="date" id="loanStartDate" value={newLoanStartDate} onChange={e => setNewLoanStartDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
             </div>
-            <div>
-              <label htmlFor="loanDueDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Repayment Date</label>
-              <input type="date" id="loanDueDate" value={newLoanDueDate} onChange={e => setNewLoanDueDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
-            </div>
+            {!newLoanIsRecurring && (
+              <div>
+                <label htmlFor="loanDueDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Repayment Date</label>
+                <input type="date" id="loanDueDate" value={newLoanDueDate} onChange={e => setNewLoanDueDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
+              </div>
+            )}
           </div>
           <div>
             <label htmlFor="loanDescription" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Description <span className="text-xs text-slate-500">(Optional)</span></label>
             <textarea id="loanDescription" rows={3} value={newLoanDescription} onChange={e => setNewLoanDescription(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" placeholder="e.g., For their car repair." />
           </div>
+          <div className="space-y-4">
+            <div className="flex items-center">
+              <input id="isRecurringLoan" type="checkbox" checked={newLoanIsRecurring} onChange={e => setNewLoanIsRecurring(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500" />
+              <label htmlFor="isRecurringLoan" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">This is a recurring loan</label>
+            </div>
+            {newLoanIsRecurring && (
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="loanRecurrenceType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Recurrence Type</label>
+                  <select id="loanRecurrenceType" value={newLoanRecurrenceType} onChange={e => setNewLoanRecurrenceType(e.target.value as RecurrenceType)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                    {Object.values(RecurrenceType).filter(type => type !== RecurrenceType.None).map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="loanFirstPaymentDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300">First Payment Date</label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">When do you expect to receive the first payment?</p>
+                    <input type="date" id="loanFirstPaymentDate" value={newLoanRecurrenceFirstPaymentDate} onChange={e => setNewLoanRecurrenceFirstPaymentDate(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
+                  </div>
+                  <div>
+                    <label htmlFor="loanPaymentAmount" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Payment Amount <span className="text-xs text-slate-500">(Optional)</span></label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">How much will they pay each time?</p>
+                    <input type="number" id="loanPaymentAmount" value={newLoanRecurrencePaymentAmount} onChange={e => setNewLoanRecurrencePaymentAmount(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" placeholder="e.g., 250" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <label htmlFor="loanCurrency" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Currency</label>
+            <select id="loanCurrency" value={newLoanCurrency} onChange={e => setNewLoanCurrency(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm">
+              {SUPPORTED_CURRENCIES.map(currency => (
+                <option key={currency} value={currency}>{currency}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center">
+            <input id="loanReminderEnabled" type="checkbox" checked={newLoanReminderEnabled} onChange={e => setNewLoanReminderEnabled(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500" />
+            <label htmlFor="loanReminderEnabled" className="ml-2 block text-sm text-slate-900 dark:text-slate-200">Enable Reminders</label>
+          </div>
+          {newLoanReminderEnabled && (
+            <div>
+              <label htmlFor="loanReminderDays" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Remind me <span className="text-xs text-slate-500">(days before due date)</span></label>
+              <input type="number" id="loanReminderDays" value={newLoanReminderDays} onChange={e => setNewLoanReminderDays(e.target.value)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" placeholder="e.g., 3" />
+            </div>
+          )}
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={resetAndCloseForms} className="px-4 py-2 text-sm font-medium rounded-md text-slate-700 dark:text-slate-200 bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
             <button type="submit" className="px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors">{editingLoanId ? 'Save Changes' : 'Add Loan'}</button>
           </div>
         </form>
       </Modal>
-
+      
       <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
         <div className="space-y-6">
+            <div>
+                <label htmlFor="defaultCurrency" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Default Currency</label>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Choose the default currency for your financial entries.</p>
+                <select id="defaultCurrency" value={defaultCurrency} onChange={e => handleStateChange({ ...appState, 'loandash-default-currency': e.target.value })} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                    {SUPPORTED_CURRENCIES.map(currency => (
+                        <option key={currency} value={currency}>{currency}</option>
+                    ))}
+                </select>
+            </div>
             <div>
                 <label htmlFor="autoArchive" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Auto-Archive Completed Items</label>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Automatically move paid-off items to the archive after a set time.</p>
                 <select id="autoArchive" value={autoArchiveSetting} onChange={e => handleAutoArchiveChange(e.target.value as AutoArchiveSetting)} className="mt-1 block w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
                     <option value="never">Never</option>
-                    <option value="immediate">Immediately</option>
+                    <option value="immediately">Immediately</option>
                     <option value="1day">After 1 Day</option>
                     <option value="7days">After 7 Days</option>
                 </select>
@@ -778,3 +1194,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

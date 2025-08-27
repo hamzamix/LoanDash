@@ -1,34 +1,17 @@
 import { RecurrenceType, RecurrenceSettings } from '../types';
 
-/**
- * Calculate the next due date based on recurrence settings
- * @param currentDueDate - Current due date
- * @param recurrenceSettings - Recurrence configuration
- * @returns Next due date or null if recurrence has ended
- */
-export function calculateNextDueDate(
-  currentDueDate: string,
-  recurrenceSettings: RecurrenceSettings,
-  currentOccurrence: number = 1
-): string | null {
-  if (recurrenceSettings.type === RecurrenceType.None) {
-    return null;
-  }
-
-  // Check if we've reached the maximum occurrences
-  if (recurrenceSettings.maxOccurrences && currentOccurrence >= recurrenceSettings.maxOccurrences) {
-    return null;
-  }
-
-  const currentDate = new Date(currentDueDate);
-  let nextDate = new Date(currentDate);
-
-  switch (recurrenceSettings.type) {
+export const calculateNextDueDate = (
+  currentDueDate: Date,
+  recurrenceType: RecurrenceType
+): Date => {
+  const nextDate = new Date(currentDueDate);
+  
+  switch (recurrenceType) {
+    case RecurrenceType.Daily:
+      nextDate.setDate(nextDate.getDate() + 1);
+      break;
     case RecurrenceType.Weekly:
       nextDate.setDate(nextDate.getDate() + 7);
-      break;
-    case RecurrenceType.BiWeekly:
-      nextDate.setDate(nextDate.getDate() + 14);
       break;
     case RecurrenceType.Monthly:
       nextDate.setMonth(nextDate.getMonth() + 1);
@@ -36,36 +19,29 @@ export function calculateNextDueDate(
     case RecurrenceType.Quarterly:
       nextDate.setMonth(nextDate.getMonth() + 3);
       break;
+    case RecurrenceType.Yearly:
+      nextDate.setFullYear(nextDate.getFullYear() + 1);
+      break;
     default:
-      return null;
+      // Default to monthly if unknown type
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      break;
   }
+  
+  return nextDate;
+};
 
-  // Check if we've passed the end date
-  if (recurrenceSettings.endDate && nextDate > new Date(recurrenceSettings.endDate)) {
-    return null;
-  }
-
-  return nextDate.toISOString();
-}
-
-/**
- * Get human-readable recurrence description
- * @param recurrenceSettings - Recurrence configuration
- * @returns Human-readable description
- */
-export function getRecurrenceDescription(recurrenceSettings: RecurrenceSettings): string {
-  if (recurrenceSettings.type === RecurrenceType.None) {
-    return 'One-time';
-  }
-
+export const getRecurrenceDescription = (recurrenceSettings: RecurrenceSettings): string => {
+  const { type, endDate, maxOccurrences } = recurrenceSettings;
+  
   let description = '';
   
-  switch (recurrenceSettings.type) {
+  switch (type) {
+    case RecurrenceType.Daily:
+      description = 'Daily';
+      break;
     case RecurrenceType.Weekly:
       description = 'Weekly';
-      break;
-    case RecurrenceType.BiWeekly:
-      description = 'Bi-weekly';
       break;
     case RecurrenceType.Monthly:
       description = 'Monthly';
@@ -73,70 +49,20 @@ export function getRecurrenceDescription(recurrenceSettings: RecurrenceSettings)
     case RecurrenceType.Quarterly:
       description = 'Quarterly';
       break;
+    case RecurrenceType.Yearly:
+      description = 'Yearly';
+      break;
+    default:
+      description = 'Monthly';
+      break;
   }
-
-  if (recurrenceSettings.maxOccurrences) {
-    description += ` (${recurrenceSettings.maxOccurrences} times)`;
-  } else if (recurrenceSettings.endDate) {
-    const endDate = new Date(recurrenceSettings.endDate).toLocaleDateString();
-    description += ` (until ${endDate})`;
+  
+  if (endDate) {
+    description += ` until ${new Date(endDate).toLocaleDateString()}`;
+  } else if (maxOccurrences) {
+    description += ` for ${maxOccurrences} occurrences`;
   }
-
+  
   return description;
-}
-
-/**
- * Check if a debt should create a new recurrence
- * @param debt - The debt object
- * @param currentOccurrence - Current occurrence number
- * @returns Whether to create a new recurrence
- */
-export function shouldCreateNewRecurrence(
-  recurrenceSettings: RecurrenceSettings,
-  currentOccurrence: number
-): boolean {
-  if (recurrenceSettings.type === RecurrenceType.None) {
-    return false;
-  }
-
-  // Check maximum occurrences
-  if (recurrenceSettings.maxOccurrences && currentOccurrence >= recurrenceSettings.maxOccurrences) {
-    return false;
-  }
-
-  // Check end date
-  if (recurrenceSettings.endDate && new Date() > new Date(recurrenceSettings.endDate)) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Generate upcoming recurrence dates
- * @param startDate - Start date for recurrence
- * @param recurrenceSettings - Recurrence configuration
- * @param count - Number of future dates to generate
- * @returns Array of upcoming dates
- */
-export function generateUpcomingDates(
-  startDate: string,
-  recurrenceSettings: RecurrenceSettings,
-  count: number = 5
-): string[] {
-  const dates: string[] = [];
-  let currentDate = startDate;
-  let occurrence = 1;
-
-  for (let i = 0; i < count; i++) {
-    const nextDate = calculateNextDueDate(currentDate, recurrenceSettings, occurrence);
-    if (!nextDate) break;
-    
-    dates.push(nextDate);
-    currentDate = nextDate;
-    occurrence++;
-  }
-
-  return dates;
-}
+};
 
